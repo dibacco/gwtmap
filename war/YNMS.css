@@ -28,6 +28,15 @@ h1 {
   color: red;
 }
 
+.gwt-Label{ 
+   font-size: 150%; 
+   font-weight: bold;
+   color:black;
+   padding:5px;
+   margin:5px;
+   background-color: rgba(200,200,200,0.2);
+}
+
 /** Set ids using widget.getElement().setId("idOfElement") */
 #closeButton {
   margin: 15px 6px 6px;
