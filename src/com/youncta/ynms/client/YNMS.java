@@ -8,15 +8,21 @@ import org.gwtopenmaps.openlayers.client.LonLat;
 import org.gwtopenmaps.openlayers.client.Map;
 import org.gwtopenmaps.openlayers.client.MapOptions;
 import org.gwtopenmaps.openlayers.client.MapWidget;
+import org.gwtopenmaps.openlayers.client.RenderIntent;
 import org.gwtopenmaps.openlayers.client.control.Scale;
 import org.gwtopenmaps.openlayers.client.control.ScaleLine;
 import org.gwtopenmaps.openlayers.client.control.SelectFeature;
+import org.gwtopenmaps.openlayers.client.control.SelectFeatureOptions;
+import org.gwtopenmaps.openlayers.client.event.FeatureHighlightedListener;
+import org.gwtopenmaps.openlayers.client.event.FeatureUnhighlightedListener;
 import org.gwtopenmaps.openlayers.client.event.VectorFeatureSelectedListener;
 import org.gwtopenmaps.openlayers.client.event.VectorFeatureSelectedListener.FeatureSelectedEvent;
 import org.gwtopenmaps.openlayers.client.feature.VectorFeature;
 import org.gwtopenmaps.openlayers.client.geometry.Point;
 import org.gwtopenmaps.openlayers.client.layer.OSM;
 import org.gwtopenmaps.openlayers.client.layer.Vector;
+import org.gwtopenmaps.openlayers.client.popup.FramedCloud;
+import org.gwtopenmaps.openlayers.client.popup.Popup;
 import org.gwtopenmaps.openlayers.client.Style;
 
 import com.google.gwt.event.logical.shared.SelectionEvent;
@@ -80,10 +86,10 @@ public class YNMS implements EntryPoint {
 	      	  new AlarmEvent("Equipment 1", "192.168.0.30", "Tx failure"));
 
 	  private static List<Equipment> EQUIPMENT = Arrays.asList(
-			  new Equipment("Node 1", "192.168.0.25", new LonLat(84.92, 56.51)), 
-	      	  new Equipment("Node 2", "192.168.0.29", new LonLat(84.98, 56.52)), 
-	      	  new Equipment("Node 3", "192.168.0.30", new LonLat(84.93, 56.53)), 
-	      	  new Equipment("Node 4", "192.168.0.34", new LonLat(84.97, 56.54)),
+			  new Equipment("Node 1", "192.168.0.25", new LonLat(84.96, 56.45)), 
+	      	  new Equipment("Node 2", "192.168.0.29", new LonLat(84.98, 56.47)), 
+	      	  new Equipment("Node 3", "192.168.0.30", new LonLat(84.93, 56.49)), 
+	      	  new Equipment("Node 4", "192.168.0.34", new LonLat(84.97, 56.52)),
 			  new Equipment("Node 5", "192.168.0.27", new LonLat(9.18, 45.46)), 
 	      	  new Equipment("Node 6", "192.168.0.41", new LonLat(9.16, 45.48)), 
 	      	  new Equipment("Node 7", "192.168.0.33", new LonLat(9.19, 45.49)), 
@@ -290,7 +296,7 @@ public class YNMS implements EntryPoint {
         map.addControl(new ScaleLine()); //Display the scaleline
         map.addControl(new Scale());
 
-		LonLat lonLat = new LonLat(84.96, 56.50);
+		LonLat lonLat = new LonLat(84.96, 56.48);
 		lonLat.transform("EPSG:4326", mapWidget.getMap().getProjection()); //transform lonlat (provided in EPSG:4326) to OSM coordinate system (the map projection)
 		mapWidget.getMap().setCenter(lonLat, 12);
 		
@@ -301,26 +307,76 @@ public class YNMS implements EntryPoint {
         pointStyle.setGraphicSize(32, 32);
         pointStyle.setFillOpacity(1.0);
 
+        Style hoverStyle = new Style();
+        hoverStyle.setFillColor("blue");
+        hoverStyle.setStrokeColor("pink");
+        hoverStyle.setStrokeWidth(2);
+        hoverStyle.setFillOpacity(0.9);
+        hoverStyle.setPointRadius(30);
+        
         for (int i = 0; i < EQUIPMENT.size(); i++) {
         	LonLat ll =  EQUIPMENT.get(i).lonLat;
         	ll.transform("EPSG:4326", mapWidget.getMap().getProjection());
-            vectorLayer.addFeature(new VectorFeature(new Point(ll.lon(), ll.lat()), pointStyle));
+        	VectorFeature  pointFeature = new VectorFeature(new Point(ll.lon(), ll.lat()), pointStyle);
+        	pointFeature.setFeatureId(EQUIPMENT.get(i).name);
+            
+            final Popup popup = new FramedCloud("id1",
+                    ll, null,
+                    "<h3>"+pointFeature.getFeatureId()+"</h3><br>No alarm", null, false);
+            popup.setPanMapIfOutOfView(true); // this set the popup in a strategic
+            // way, and pans the map if needed.
+            popup.setAutoSize(true);
+            pointFeature.setPopup(popup);
+            
+            vectorLayer.addFeature(pointFeature);
         }
         
         mapWidget.getMap().addLayer(vectorLayer);
 
         final SelectFeature selectFeature = new SelectFeature(vectorLayer);
         selectFeature.setAutoActivate(true);
+ 
+        // SelectFeature control to capture hover on the vectors
+        SelectFeatureOptions selectFeatureHoverOptions = new SelectFeatureOptions();
+        // use the tempory style to be defined in the StyleMap     
+        selectFeatureHoverOptions.setRenderIntent(RenderIntent.TEMPORARY);
+        selectFeatureHoverOptions.setHighlightOnly(true);
+        selectFeatureHoverOptions.setHover();
+        SelectFeature selectHoverFeature = new SelectFeature(vectorLayer,  selectFeatureHoverOptions);
+        selectHoverFeature.setClickOut(false);
+        selectHoverFeature.setAutoActivate(true);
+ 
+        mapWidget.getMap().addControl(selectHoverFeature);
         mapWidget.getMap().addControl(selectFeature);
-
+        
         vectorLayer.addVectorFeatureSelectedListener(new VectorFeatureSelectedListener() {
             public void onFeatureSelected(FeatureSelectedEvent eventObject) {
                 selectFeature.unSelect(eventObject.getVectorFeature());
-                openNewWindow("Y-Packet", "http://10.10.10.2");
+                String url = GWT.getHostPageBaseURL();
+                url = url.substring(0, url.lastIndexOf(':')+1)+"9090";
+                openNewWindow("Y-Packet", url);
             }
         });
         
-       
+        // capture hover by adding a listener to the control, and display the
+        // popup
+        selectHoverFeature.addFeatureHighlightedListener(new FeatureHighlightedListener() {
+ 
+                    public void onFeatureHighlighted(VectorFeature vectorFeature) {
+                        map.addPopup(vectorFeature.getPopup());
+                    }
+ 
+                });
+ 
+        // capture unhover, and remove popup
+        selectHoverFeature
+                .addFeatureUnhighlightedListener(new FeatureUnhighlightedListener() {
+ 
+                    public void onFeatureUnhighlighted(VectorFeature vectorFeature) {
+                                map.removePopup(vectorFeature.getPopup());
+                            }
+ 
+                });
         
         CellTable<AlarmEvent> table = buildEventLog();
         
@@ -334,7 +390,7 @@ public class YNMS implements EntryPoint {
         labelMessage.setHorizontalAlignment(HasHorizontalAlignment.ALIGN_CENTER);
         labelMessage.setWidth("100%");
         labelMessage.setText("Node List");
-        
+
         westPanel.add(labelMessage);
 
         westPanel.add(treeMenu);
@@ -345,6 +401,7 @@ public class YNMS implements EntryPoint {
 
         p.addSouth(scrollPanel, 128);
         p.add(mapWidget);
+
         
 		RootLayoutPanel.get().add(p);
 	}
